@@ -7,7 +7,7 @@ import math
 import torch as th
 import torch.nn as nn
 from torch.nn import Parameter
-from norm_layer import get_norm_layer
+from .norm_layer import get_norm_layer
 
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
