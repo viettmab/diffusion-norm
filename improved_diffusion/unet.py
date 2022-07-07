@@ -15,8 +15,10 @@ from .nn import (
     avg_pool_nd,
     zero_module,
     normalization,
+    re_normalization,
     timestep_embedding,
     checkpoint,
+    SpectralNorm
 )
 
 
@@ -63,7 +65,7 @@ class Upsample(nn.Module):
         self.use_conv = use_conv
         self.dims = dims
         if use_conv:
-            self.conv = conv_nd(dims, channels, channels, 3, padding=1)
+            self.conv = SpectralNorm(conv_nd(dims, channels, channels, 3, padding=1))
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -95,7 +97,7 @@ class Downsample(nn.Module):
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1)
+            self.op = SpectralNorm(conv_nd(dims, channels, channels, 3, stride=stride, padding=1))
         else:
             self.op = avg_pool_nd(stride)
 
@@ -120,15 +122,15 @@ class ResBlock(TimestepBlock):
     """
 
     def __init__(
-        self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
-        use_conv=False,
-        use_scale_shift_norm=False,
-        dims=2,
-        use_checkpoint=False,
+            self,
+            channels,
+            emb_channels,
+            dropout,
+            out_channels=None,
+            use_conv=False,
+            use_scale_shift_norm=False,
+            dims=2,
+            use_checkpoint=False,
     ):
         super().__init__()
         self.channels = channels
@@ -142,7 +144,7 @@ class ResBlock(TimestepBlock):
         self.in_layers = nn.Sequential(
             normalization(channels),
             SiLU(),
-            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+            SpectralNorm(conv_nd(dims, channels, self.out_channels, 3, padding=1)),
         )
         self.emb_layers = nn.Sequential(
             SiLU(),
@@ -156,18 +158,18 @@ class ResBlock(TimestepBlock):
             SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+                SpectralNorm(conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1), scale=0.5)
             ),
         )
 
         if self.out_channels == channels:
-            self.skip_connection = nn.Identity()
+            self.skip_connection = SpectralNorm(nn.Identity(), scale=0.5)
         elif use_conv:
-            self.skip_connection = conv_nd(
+            self.skip_connection = SpectralNorm(conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
-            )
+            ), scale=0.5)
         else:
-            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+            self.skip_connection = SpectralNorm(conv_nd(dims, channels, self.out_channels, 1), scale=0.5)
 
     def forward(self, x, emb):
         """
@@ -212,9 +214,9 @@ class AttentionBlock(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         self.norm = normalization(channels)
-        self.qkv = conv_nd(1, channels, channels * 3, 1)
+        self.qkv = SpectralNorm(conv_nd(1, channels, channels * 3, 1))
         self.attention = QKVAttention()
-        self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
+        self.proj_out = zero_module(SpectralNorm(conv_nd(1, channels, channels, 1), scale=0.5))
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -227,6 +229,7 @@ class AttentionBlock(nn.Module):
         h = self.attention(qkv)
         h = h.reshape(b, -1, h.shape[-1])
         h = self.proj_out(h)
+        x = SpectralNorm(nn.Identity(x), scale=0.5)
         return (x + h).reshape(b, c, *spatial)
 
 
@@ -299,21 +302,21 @@ class UNetModel(nn.Module):
     """
 
     def __init__(
-        self,
-        in_channels,
-        model_channels,
-        out_channels,
-        num_res_blocks,
-        attention_resolutions,
-        dropout=0,
-        channel_mult=(1, 2, 4, 8),
-        conv_resample=True,
-        dims=2,
-        num_classes=None,
-        use_checkpoint=False,
-        num_heads=1,
-        num_heads_upsample=-1,
-        use_scale_shift_norm=False,
+            self,
+            in_channels,
+            model_channels,
+            out_channels,
+            num_res_blocks,
+            attention_resolutions,
+            dropout=0,
+            channel_mult=(1, 2, 4, 8),
+            conv_resample=True,
+            dims=2,
+            num_classes=None,
+            use_checkpoint=False,
+            num_heads=1,
+            num_heads_upsample=-1,
+            use_scale_shift_norm=False,
     ):
         super().__init__()
 
@@ -434,6 +437,7 @@ class UNetModel(nn.Module):
             normalization(ch),
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+            re_normalization(out_channels)
         )
 
     def convert_to_fp16(self):
@@ -469,7 +473,7 @@ class UNetModel(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         assert (y is not None) == (
-            self.num_classes is not None
+                self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
 
         hs = []
@@ -544,4 +548,3 @@ class SuperResModel(UNetModel):
         upsampled = F.interpolate(low_res, (new_height, new_width), mode="bilinear")
         x = th.cat([x, upsampled], dim=1)
         return super().get_feature_vectors(x, timesteps, **kwargs)
-
