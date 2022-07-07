@@ -7,7 +7,7 @@ import math
 import torch as th
 import torch.nn as nn
 from torch.nn import Parameter
-from .norm_layer import get_norm_layer
+from .norm_layer import ReGroupNorm
 
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
@@ -109,7 +109,7 @@ def re_normalization(channels):
     :param channels: number of input channels.
     :return: an nn.Module for normalization.
     """
-    return get_norm_layer("regn", num_channels=channels, group_size=channels, r=1.) #reLN
+    return ReGroupNorm(num_channels=channels, group_size=channels, r=1.) #reLN
 
 
 def timestep_embedding(timesteps, dim, max_period=10000):

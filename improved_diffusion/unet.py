@@ -163,13 +163,13 @@ class ResBlock(TimestepBlock):
         )
 
         if self.out_channels == channels:
-            self.skip_connection = SpectralNorm(nn.Identity(), scale=0.5)
+            self.skip_connection = nn.Identity()
         elif use_conv:
             self.skip_connection = SpectralNorm(conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
-            ), scale=0.5)
+            ))
         else:
-            self.skip_connection = SpectralNorm(conv_nd(dims, channels, self.out_channels, 1), scale=0.5)
+            self.skip_connection = SpectralNorm(conv_nd(dims, channels, self.out_channels, 1))
 
     def forward(self, x, emb):
         """
@@ -196,7 +196,7 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        return self.skip_connection(x) + h
+        return self.skip_connection(x*0.5) + h
 
 
 class AttentionBlock(nn.Module):
@@ -229,7 +229,7 @@ class AttentionBlock(nn.Module):
         h = self.attention(qkv)
         h = h.reshape(b, -1, h.shape[-1])
         h = self.proj_out(h)
-        x = SpectralNorm(nn.Identity(x), scale=0.5)
+        x = x*0.5
         return (x + h).reshape(b, c, *spatial)
 
 
