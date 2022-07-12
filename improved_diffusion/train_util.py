@@ -250,8 +250,9 @@ class TrainLoop:
 
     def _log_grad_norm(self):
         sqsum = 0.0
-        # for p in self.master_params:
-        #     sqsum += (p.grad ** 2).sum().item()
+        for p in self.master_params:
+            if p.grad is not None:
+                sqsum += (p.grad ** 2).sum().item()
         logger.logkv_mean("grad_norm", np.sqrt(sqsum))
 
     def _anneal_lr(self):
