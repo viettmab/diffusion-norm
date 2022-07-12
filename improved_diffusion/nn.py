@@ -182,11 +182,7 @@ class CheckpointFunction(th.autograd.Function):
         return (None, None) + input_grads
 
 def l2normalize(v, eps=1e-12):
-    if v.norm() > 1:
-        return v / (v.norm() + eps)
-    else:
-        return v
-
+    return v / (v.norm() + eps)
 
 class SpectralNorm(nn.Module):
     def __init__(self, module, name='weight', power_iterations=1, scale=1.):
@@ -210,7 +206,10 @@ class SpectralNorm(nn.Module):
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
-        setattr(self.module, self.name, self.scale * w / sigma.expand_as(w))
+        if sigma > 1:
+            setattr(self.module, self.name, self.scale * w / sigma.expand_as(w))
+        else:
+            setattr(self.module, self.name, self.scale * w)
 
     def _made_params(self):
         try:

@@ -52,7 +52,6 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
 class Upsample(nn.Module):
     """
     An upsampling layer with an optional convolution.
-
     :param channels: channels in the inputs and outputs.
     :param use_conv: a bool determining if a convolution is applied.
     :param dims: determines if the signal is 1D, 2D, or 3D. If 3D, then
@@ -65,7 +64,7 @@ class Upsample(nn.Module):
         self.use_conv = use_conv
         self.dims = dims
         if use_conv:
-            self.conv = (conv_nd(dims, channels, channels, 3, padding=1))
+            self.conv = SpectralNorm(conv_nd(dims, channels, channels, 3, padding=1))
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -83,7 +82,6 @@ class Upsample(nn.Module):
 class Downsample(nn.Module):
     """
     A downsampling layer with an optional convolution.
-
     :param channels: channels in the inputs and outputs.
     :param use_conv: a bool determining if a convolution is applied.
     :param dims: determines if the signal is 1D, 2D, or 3D. If 3D, then
@@ -97,7 +95,7 @@ class Downsample(nn.Module):
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = (conv_nd(dims, channels, channels, 3, stride=stride, padding=1))
+            self.op = SpectralNorm(conv_nd(dims, channels, channels, 3, stride=stride, padding=1))
         else:
             self.op = avg_pool_nd(stride)
 
@@ -109,7 +107,6 @@ class Downsample(nn.Module):
 class ResBlock(TimestepBlock):
     """
     A residual block that can optionally change the number of channels.
-
     :param channels: the number of input channels.
     :param emb_channels: the number of timestep embedding channels.
     :param dropout: the rate of dropout.
@@ -165,16 +162,15 @@ class ResBlock(TimestepBlock):
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         elif use_conv:
-            self.skip_connection = (conv_nd(
+            self.skip_connection = SpectralNorm(conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
             ))
         else:
-            self.skip_connection = (conv_nd(dims, channels, self.out_channels, 1))
+            self.skip_connection = SpectralNorm(conv_nd(dims, channels, self.out_channels, 1))
 
     def forward(self, x, emb):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
-
         :param x: an [N x C x ...] Tensor of features.
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
         :return: an [N x C x ...] Tensor of outputs.
@@ -196,13 +192,12 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        return self.skip_connection(x*0.5) + h
+        return self.skip_connection(x*0.5) + h * 0.5
 
 
 class AttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
-
     Originally ported from here, but adapted to the N-d case.
     https://github.com/hojonathanho/diffusion/blob/1e0dceb3b3495bbe19116a5e1b3596cd0706c543/diffusion_tf/models/unet.py#L66.
     """
@@ -214,7 +209,7 @@ class AttentionBlock(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         self.norm = normalization(channels)
-        self.qkv = (conv_nd(1, channels, channels * 3, 1))
+        self.qkv = SpectralNorm(conv_nd(1, channels, channels * 3, 1))
         self.attention = QKVAttention()
         self.proj_out = zero_module((conv_nd(1, channels, channels, 1)))
 
@@ -230,6 +225,7 @@ class AttentionBlock(nn.Module):
         h = h.reshape(b, -1, h.shape[-1])
         h = self.proj_out(h)
         x = x*0.5
+        h = h*0.5
         return (x + h).reshape(b, c, *spatial)
 
 
@@ -241,7 +237,6 @@ class QKVAttention(nn.Module):
     def forward(self, qkv):
         """
         Apply QKV attention.
-
         :param qkv: an [N x (C * 3) x T] tensor of Qs, Ks, and Vs.
         :return: an [N x C x T] tensor after attention.
         """
@@ -259,15 +254,12 @@ class QKVAttention(nn.Module):
         """
         A counter for the `thop` package to count the operations in an
         attention operation.
-
         Meant to be used like:
-
             macs, params = thop.profile(
                 model,
                 inputs=(inputs, timestamps),
                 custom_ops={QKVAttention: QKVAttention.count_flops},
             )
-
         """
         b, c, *spatial = y[0].shape
         num_spatial = int(np.prod(spatial))
@@ -281,7 +273,6 @@ class QKVAttention(nn.Module):
 class UNetModel(nn.Module):
     """
     The full UNet model with attention and timestep embedding.
-
     :param in_channels: channels in the input Tensor.
     :param model_channels: base channel count for the model.
     :param out_channels: channels in the output Tensor.
@@ -466,7 +457,6 @@ class UNetModel(nn.Module):
     def forward(self, x, timesteps, y=None):
         """
         Apply the model to an input batch.
-
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
         :param y: an [N] Tensor of labels, if class-conditional.
@@ -497,7 +487,6 @@ class UNetModel(nn.Module):
     def get_feature_vectors(self, x, timesteps, y=None):
         """
         Apply the model and return all of the intermediate tensors.
-
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
         :param y: an [N] Tensor of labels, if class-conditional.
@@ -530,7 +519,6 @@ class UNetModel(nn.Module):
 class SuperResModel(UNetModel):
     """
     A UNetModel that performs super-resolution.
-
     Expects an extra kwarg `low_res` to condition on a low-resolution image.
     """
 
