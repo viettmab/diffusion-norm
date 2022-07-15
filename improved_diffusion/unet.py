@@ -145,10 +145,10 @@ class ResBlock(TimestepBlock):
         )
         self.emb_layers = nn.Sequential(
             SiLU(),
-            linear(
+            SpectralNorm(linear(
                 emb_channels,
                 2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-            ),
+            )),
         )
         self.out_layers = nn.Sequential(
             normalization(self.out_channels),
