@@ -139,7 +139,7 @@ class GroupNorm(nn.GroupNorm):
 
 
 class ReGroupNorm(nn.GroupNorm):
-    def __init__(self, num_channels, group_size=2, r=1., affine=True):
+    def __init__(self, num_channels, group_size=2, r=1.1, affine=False):
         num_groups = num_channels // group_size
         super(ReGroupNorm, self).__init__(
             num_groups, num_channels, affine)

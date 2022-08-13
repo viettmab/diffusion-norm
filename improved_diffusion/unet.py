@@ -154,9 +154,9 @@ class ResBlock(TimestepBlock):
             normalization(self.out_channels),
             SiLU(),
             nn.Dropout(p=dropout),
-            zero_module(
+            SpectralNorm(zero_module(
                 (conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1))
-            ),
+            )),
         )
 
         if self.out_channels == channels:
@@ -211,7 +211,7 @@ class AttentionBlock(nn.Module):
         self.norm = normalization(channels)
         self.qkv = SpectralNorm(conv_nd(1, channels, channels * 3, 1))
         self.attention = QKVAttention()
-        self.proj_out = zero_module((conv_nd(1, channels, channels, 1)))
+        self.proj_out = SpectralNorm(zero_module((conv_nd(1, channels, channels, 1))))
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -427,7 +427,7 @@ class UNetModel(nn.Module):
         self.out = nn.Sequential(
             normalization(ch),
             SiLU(),
-            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
+            SpectralNorm(zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1))),
             re_normalization(out_channels)
         )
 
