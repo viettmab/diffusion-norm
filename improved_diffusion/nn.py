@@ -34,7 +34,7 @@ def conv_nd(dims, *args, **kwargs):
         return ConstrainedConv3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
 
-class ConstrainedConv1d(nn.Conv2d):
+class ConstrainedConv1d(nn.Conv1d):
     def forward(self, input):
         return F.conv1d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
                         self.padding, self.dilation, self.groups)
