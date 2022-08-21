@@ -138,13 +138,14 @@ class GroupNorm(nn.GroupNorm):
             f"eps={self.eps}, affine={self.affine})"
 
 
-class ReGroupNorm(nn.GroupNorm):
-    def __init__(self, num_channels, group_size=2, r=1.1, affine=False):
+class ReGroupNorm(nn.Module):
+    def __init__(self, num_channels, group_size=2, r=1):
         num_groups = num_channels // group_size
-        super(ReGroupNorm, self).__init__(
-            num_groups, num_channels, affine)
+        super().__init__()
         self.r = r
         self.group_size = group_size
+        self.num_groups = num_groups
+        self.num_channels = num_channels
 
     def forward(self, input):
         b = input.size(0)
@@ -157,20 +158,20 @@ class ReGroupNorm(nn.GroupNorm):
         input = (input - mean[:, :, None]) / torch.sqrt(var[:, :, None]+1e-05).clamp(min=self.r)
 
         input = input.reshape(init_size)
-        if self.affine:
-            if len(init_size) == 2:
-                input = input * self.weight[None, :] + self.bias[None, :]
-            elif len(init_size) == 4:
-                input = input * self.weight[None, :, None, None] + self.bias[None, :, None, None]
-            else:
-                raise NotImplementedError("Only 1D and 2D groupnorm with affine")
+        # if self.affine:
+        #     if len(init_size) == 2:
+        #         input = input * self.weight[None, :] + self.bias[None, :]
+        #     elif len(init_size) == 4:
+        #         input = input * self.weight[None, :, None, None] + self.bias[None, :, None, None]
+        #     else:
+        #         raise NotImplementedError("Only 1D and 2D groupnorm with affine")
 
         input = input * s / (s - 1)
         return input
 
-    def __repr__(self):
-        return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \
-            f"r={self.r}, affine={self.affine})"  
+    # def __repr__(self):
+    #     return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \
+    #         f"r={self.r}, affine={self.affine})"
 
 
 def get_norm_layer(norm_layer=None, **kwargs):

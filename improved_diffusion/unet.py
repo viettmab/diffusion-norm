@@ -17,8 +17,7 @@ from .nn import (
     normalization,
     re_normalization,
     timestep_embedding,
-    checkpoint,
-    SpectralNorm
+    checkpoint
 )
 
 
@@ -64,7 +63,7 @@ class Upsample(nn.Module):
         self.use_conv = use_conv
         self.dims = dims
         if use_conv:
-            self.conv = SpectralNorm(conv_nd(dims, channels, channels, 3, padding=1))
+            self.conv = conv_nd(dims, channels, channels, 3, padding=1)
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -95,7 +94,7 @@ class Downsample(nn.Module):
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
         if use_conv:
-            self.op = SpectralNorm(conv_nd(dims, channels, channels, 3, stride=stride, padding=1))
+            self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1)
         else:
             self.op = avg_pool_nd(stride)
 
@@ -141,32 +140,32 @@ class ResBlock(TimestepBlock):
         self.in_layers = nn.Sequential(
             normalization(channels),
             SiLU(),
-            SpectralNorm(conv_nd(dims, channels, self.out_channels, 3, padding=1)),
+            conv_nd(dims, channels, self.out_channels, 3, padding=1),
         )
         self.emb_layers = nn.Sequential(
             SiLU(),
-            SpectralNorm(linear(
+            linear(
                 emb_channels,
                 2 * self.out_channels if use_scale_shift_norm else self.out_channels,
-            )),
+            ),
         )
         self.out_layers = nn.Sequential(
             normalization(self.out_channels),
             SiLU(),
             nn.Dropout(p=dropout),
-            SpectralNorm(zero_module(
+            zero_module(
                 (conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1))
-            )),
+            ),
         )
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
         elif use_conv:
-            self.skip_connection = SpectralNorm(conv_nd(
+            self.skip_connection = conv_nd(
                 dims, channels, self.out_channels, 3, padding=1
-            ))
+            )
         else:
-            self.skip_connection = SpectralNorm(conv_nd(dims, channels, self.out_channels, 1))
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
     def forward(self, x, emb):
         """
@@ -209,9 +208,9 @@ class AttentionBlock(nn.Module):
         self.use_checkpoint = use_checkpoint
 
         self.norm = normalization(channels)
-        self.qkv = SpectralNorm(conv_nd(1, channels, channels * 3, 1))
+        self.qkv = conv_nd(1, channels, channels * 3, 1)
         self.attention = QKVAttention()
-        self.proj_out = SpectralNorm(zero_module((conv_nd(1, channels, channels, 1))))
+        self.proj_out = zero_module((conv_nd(1, channels, channels, 1)))
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -427,7 +426,7 @@ class UNetModel(nn.Module):
         self.out = nn.Sequential(
             normalization(ch),
             SiLU(),
-            SpectralNorm(zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1))),
+            zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
             re_normalization(out_channels)
         )
 

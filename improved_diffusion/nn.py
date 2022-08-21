@@ -6,6 +6,7 @@ import math
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import Parameter
 from .norm_layer import ReGroupNorm
 
@@ -26,12 +27,27 @@ def conv_nd(dims, *args, **kwargs):
     Create a 1D, 2D, or 3D convolution module.
     """
     if dims == 1:
-        return nn.Conv1d(*args, **kwargs)
+        return ConstrainedConv1d(*args, **kwargs)
     elif dims == 2:
-        return nn.Conv2d(*args, **kwargs)
+        return ConstrainedConv2d(*args, **kwargs)
     elif dims == 3:
-        return nn.Conv3d(*args, **kwargs)
+        return ConstrainedConv3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
+
+class ConstrainedConv1d(nn.Conv2d):
+    def forward(self, input):
+        return F.conv1d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+
+class ConstrainedConv2d(nn.Conv2d):
+    def forward(self, input):
+        return F.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+
+class ConstrainedConv3d(nn.Conv3d):
+    def forward(self, input):
+        return F.conv3d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
+                        self.padding, self.dilation, self.groups)
 
 
 def linear(*args, **kwargs):
