@@ -1,3 +1,15 @@
+from comet_ml import Experiment
+
+# Create an experiment with your api key
+experiment = Experiment(
+    api_key="tEWthgEsVRyilR69pTzEkAfK2",
+    project_name="norm-diffusion-model",
+    workspace="viettmab123",
+    auto_histogram_weight_logging=True,
+    auto_histogram_gradient_logging=True,
+    auto_histogram_activation_logging=True
+)
+
 import copy
 import functools
 import os
@@ -19,6 +31,7 @@ from .fp16_util import (
 )
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
+
 
 # For ImageNet experiments, this was a good default value.
 # We found that the lg_loss_scale quickly climbed to
@@ -217,7 +230,7 @@ class TrainLoop:
 
             loss = (losses["loss"] * weights).mean()
             log_loss_dict(
-                self.diffusion, t, {k: v * weights for k, v in losses.items()}
+                self.diffusion, t, {k: v * weights for k, v in losses.items()}, self.step + self.resume_step
             )
             if self.use_fp16:
                 loss_scale = 2 ** self.lg_loss_scale
@@ -254,6 +267,7 @@ class TrainLoop:
             if p.grad is not None:
                 sqsum += (p.grad ** 2).sum().item()
         logger.logkv_mean("grad_norm", np.sqrt(sqsum))
+        experiment.log_metric("grad_norm", np.sqrt(sqsum), self.step + self.resume_step)
 
     def _anneal_lr(self):
         if not self.lr_anneal_steps:
@@ -348,10 +362,12 @@ def find_ema_checkpoint(main_checkpoint, step, rate):
     return None
 
 
-def log_loss_dict(diffusion, ts, losses):
+def log_loss_dict(diffusion, ts, losses,step):
     for key, values in losses.items():
         logger.logkv_mean(key, values.mean().item())
+        experiment.log_metric(key, values.mean().item(), step)
         # Log the quantiles (four quartiles, in particular).
         for sub_t, sub_loss in zip(ts.cpu().numpy(), values.detach().cpu().numpy()):
             quartile = int(4 * sub_t / diffusion.num_timesteps)
             logger.logkv_mean(f"{key}_q{quartile}", sub_loss)
+            experiment.log_metric(f"{key}_q{quartile}", sub_loss, step)
