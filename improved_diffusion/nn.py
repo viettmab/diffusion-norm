@@ -19,7 +19,8 @@ class SiLU(nn.Module):
 
 class GroupNorm32(nn.GroupNorm):
     def forward(self, x):
-        return super().forward(x.float(), self.num_groups, self.weight.clamp(min=-1.0, max=1.0)).type(x.dtype)
+        return super().forward(x.float(), self.num_groups, self.weight.clamp(min=-1.0, max=1.0)
+                               , self.bias, self.eps).type(x.dtype)
 
 
 def conv_nd(dims, *args, **kwargs):
