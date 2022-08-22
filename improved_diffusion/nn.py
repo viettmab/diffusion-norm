@@ -19,7 +19,7 @@ class SiLU(nn.Module):
 
 class GroupNorm32(nn.GroupNorm):
     def forward(self, x):
-        return super().forward(x.float()).type(x.dtype)
+        return super().forward(x.float(), self.num_groups, self.weight.clamp(min=-1.0, max=1.0)).type(x.dtype)
 
 
 def conv_nd(dims, *args, **kwargs):
@@ -54,8 +54,11 @@ def linear(*args, **kwargs):
     """
     Create a linear module.
     """
-    return nn.Linear(*args, **kwargs)
+    return ConstrainedLinear(*args, **kwargs)
 
+class ConstrainedLinear(nn.Linear):
+    def forward(self, input):
+        return F.linear(input, self.weight.clamp(min=-1.0, max=1.0), self.bias)
 
 def avg_pool_nd(dims, *args, **kwargs):
     """
