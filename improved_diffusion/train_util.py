@@ -3,7 +3,7 @@ from comet_ml import Experiment
 # Create an experiment with your api key
 experiment = Experiment(
     api_key="tEWthgEsVRyilR69pTzEkAfK2",
-    project_name="norm-diffusion-model-100",
+    project_name="norm-diffusion-model-50",
     workspace="viettmab123",
     auto_histogram_weight_logging=True,
     auto_histogram_gradient_logging=True,
