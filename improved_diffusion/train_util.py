@@ -1,6 +1,6 @@
 import comet_ml
 
-resume = True
+resume = False
 
 if resume:
     experiment = comet_ml.ExistingExperiment(
@@ -22,10 +22,6 @@ else:
         auto_histogram_weight_logging=True,
         auto_histogram_gradient_logging=True,
         auto_histogram_activation_logging=True,
-        log_code=True, log_graph=True,
-        parse_args=True, log_env_details=True,
-        log_git_metadata=True, log_git_patch=True,
-        log_env_gpu=True, log_env_host=True, log_env_cpu=True,
     )
 
 import copy
