@@ -1,14 +1,32 @@
-from comet_ml import Experiment
+import comet_ml
 
-# Create an experiment with your api key
-experiment = Experiment(
-    api_key="tEWthgEsVRyilR69pTzEkAfK2",
-    project_name="norm-diffusion-model-50",
-    workspace="viettmab123",
-    auto_histogram_weight_logging=True,
-    auto_histogram_gradient_logging=True,
-    auto_histogram_activation_logging=True
-)
+resume = False
+
+if resume:
+    experiment = comet_ml.ExistingExperiment(
+        api_key="tEWthgEsVRyilR69pTzEkAfK2",
+        experiment_key="<Key of experiment to resume>",
+        auto_histogram_weight_logging=True,
+        auto_histogram_gradient_logging=True,
+        auto_histogram_activation_logging=True,
+        log_code=True, log_graph=True,
+        parse_args=True, log_env_details=True,
+        log_git_metadata=True, log_git_patch=True,
+        log_env_gpu=True, log_env_host=True, log_env_cpu=True,
+    )
+else:
+    experiment = comet_ml.Experiment(
+        api_key="tEWthgEsVRyilR69pTzEkAfK2",
+        project_name="noise-norm-diffusion-model-50",
+        workspace="viettmab123",
+        auto_histogram_weight_logging=True,
+        auto_histogram_gradient_logging=True,
+        auto_histogram_activation_logging=True,
+        log_code=True, log_graph=True,
+        parse_args=True, log_env_details=True,
+        log_git_metadata=True, log_git_patch=True,
+        log_env_gpu=True, log_env_host=True, log_env_cpu=True,
+    )
 
 import copy
 import functools

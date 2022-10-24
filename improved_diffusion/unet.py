@@ -191,7 +191,8 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        return self.skip_connection(x*0.5) + h * 0.5
+        # return self.skip_connection(x*0.5) + h * 0.5
+        return self.skip_connection(x) + h
 
 
 class AttentionBlock(nn.Module):
@@ -223,8 +224,8 @@ class AttentionBlock(nn.Module):
         h = self.attention(qkv)
         h = h.reshape(b, -1, h.shape[-1])
         h = self.proj_out(h)
-        x = x*0.5
-        h = h*0.5
+        # x = x*0.5
+        # h = h*0.5
         return (x + h).reshape(b, c, *spatial)
 
 
@@ -429,8 +430,9 @@ class UNetModel(nn.Module):
             normalization(ch),
             SiLU(),
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
-            re_normalization(out_channels)
         )
+
+        self.re_norm = re_normalization(out_channels)
 
     def convert_to_fp16(self):
         """
@@ -475,7 +477,7 @@ class UNetModel(nn.Module):
             emb = emb + self.label_emb(y)
 
         h = x.type(self.inner_dtype)
-        # h = self.re_norm(h)
+        h = self.re_norm(h)
         for module in self.input_blocks:
             h = module(h, emb)
             hs.append(h)

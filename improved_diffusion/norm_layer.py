@@ -139,13 +139,13 @@ class GroupNorm(nn.GroupNorm):
 
 
 class ReGroupNorm(nn.Module):
-    def __init__(self, num_channels, group_size=2, r=1):
-        num_groups = num_channels // group_size
-        super().__init__()
+    def __init__(self, num_channels, group_size=2, r=1.1 , affine=False):
+        super(ReGroupNorm, self).__init__()
         self.r = r
         self.group_size = group_size
-        self.num_groups = num_groups
+        self.num_groups = num_channels // group_size
         self.num_channels = num_channels
+        self.affine = affine
 
     def forward(self, input):
         b = input.size(0)
@@ -169,9 +169,9 @@ class ReGroupNorm(nn.Module):
         input = input * s / (s - 1)
         return input
 
-    # def __repr__(self):
-    #     return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \
-    #         f"r={self.r}, affine={self.affine})"
+    def __repr__(self):
+        return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \
+            f"r={self.r}, affine={self.affine})"
 
 
 def get_norm_layer(norm_layer=None, **kwargs):
