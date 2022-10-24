@@ -1,11 +1,11 @@
 import comet_ml
 
-resume = False
+resume = True
 
 if resume:
     experiment = comet_ml.ExistingExperiment(
         api_key="tEWthgEsVRyilR69pTzEkAfK2",
-        experiment_key="<Key of experiment to resume>",
+        experiment_key="62b24a3c578042c0bd6f28d7e2c4dffd",
         auto_histogram_weight_logging=True,
         auto_histogram_gradient_logging=True,
         auto_histogram_activation_logging=True,
