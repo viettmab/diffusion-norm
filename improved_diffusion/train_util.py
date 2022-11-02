@@ -72,6 +72,7 @@ class TrainLoop:
         schedule_sampler=None,
         weight_decay=0.0,
         lr_anneal_steps=0,
+        clip_value=1
     ):
         self.model = model
         self.diffusion = diffusion
@@ -92,6 +93,7 @@ class TrainLoop:
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
         self.weight_decay = weight_decay
         self.lr_anneal_steps = lr_anneal_steps
+        self.clip_value = clip_value
 
         self.step = 0
         self.resume_step = 0
@@ -192,6 +194,12 @@ class TrainLoop:
         ):
             batch, cond = next(self.data)
             self.run_step(batch, cond)
+
+            # Weight clipping
+            for name, param in self.model.named_parameters():
+                if 'weight' in name:
+                    param.data.clamp_(-self.clip_value, self.clip_value)
+
             if self.step % self.log_interval == 0:
                 logger.dumpkvs()
             if self.step % self.save_interval == 0:

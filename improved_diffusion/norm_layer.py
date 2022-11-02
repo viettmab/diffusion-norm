@@ -139,13 +139,13 @@ class GroupNorm(nn.GroupNorm):
 
 
 class ReGroupNorm(nn.Module):
-    def __init__(self, num_channels, group_size=2, r=1.1 , affine=False):
-        super(ReGroupNorm, self).__init__()
-        self.r = r
-        self.group_size = group_size
+    def __init__(self, num_channels, group_size=3, r=1.1, affine=False):
         self.num_groups = num_channels // group_size
+        super(ReGroupNorm, self).__init__()
         self.num_channels = num_channels
         self.affine = affine
+        self.r = r
+        self.group_size = group_size
 
     def forward(self, input):
         b = input.size(0)
@@ -155,7 +155,7 @@ class ReGroupNorm(nn.Module):
         mean = input.mean(2)
         var = input.var(2, unbiased=False)
 
-        input = (input - mean[:, :, None]) / torch.sqrt(var[:, :, None]+1e-05).clamp(min=self.r)
+        input = (input - mean[:, :, None]) / (self.r*(torch.sqrt(var[:, :, None]).clamp(min=1)))
 
         input = input.reshape(init_size)
         # if self.affine:

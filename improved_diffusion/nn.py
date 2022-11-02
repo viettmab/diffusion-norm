@@ -6,10 +6,6 @@ import math
 
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn import Parameter
-from .norm_layer import ReGroupNorm
-
 
 # PyTorch 1.7 has SiLU, but we support PyTorch 1.5.
 class SiLU(nn.Module):
@@ -19,7 +15,7 @@ class SiLU(nn.Module):
 
 class GroupNorm32(nn.GroupNorm):
     def forward(self, x):
-        return F.group_norm(x.float(), self.num_groups, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.eps).type(x.dtype)
+        return super().forward(x.float()).type(x.dtype)
 
 
 def conv_nd(dims, *args, **kwargs):
@@ -27,38 +23,20 @@ def conv_nd(dims, *args, **kwargs):
     Create a 1D, 2D, or 3D convolution module.
     """
     if dims == 1:
-        return ConstrainedConv1d(*args, **kwargs)
+        return nn.Conv1d(*args, **kwargs)
     elif dims == 2:
-        return ConstrainedConv2d(*args, **kwargs)
+        return nn.Conv2d(*args, **kwargs)
     elif dims == 3:
-        return ConstrainedConv3d(*args, **kwargs)
+        return nn.Conv3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
-
-class ConstrainedConv1d(nn.Conv1d):
-    def forward(self, input):
-        return F.conv1d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
-
-class ConstrainedConv2d(nn.Conv2d):
-    def forward(self, input):
-        return F.conv2d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
-
-class ConstrainedConv3d(nn.Conv3d):
-    def forward(self, input):
-        return F.conv3d(input, self.weight.clamp(min=-1.0, max=1.0), self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
 
 
 def linear(*args, **kwargs):
     """
     Create a linear module.
     """
-    return ConstrainedLinear(*args, **kwargs)
+    return nn.Linear(*args, **kwargs)
 
-class ConstrainedLinear(nn.Linear):
-    def forward(self, input):
-        return F.linear(input, self.weight.clamp(min=-1.0, max=1.0), self.bias)
 
 def avg_pool_nd(dims, *args, **kwargs):
     """
@@ -77,7 +55,6 @@ def update_ema(target_params, source_params, rate=0.99):
     """
     Update target parameters to be closer to those of source parameters using
     an exponential moving average.
-
     :param target_params: the target parameter sequence.
     :param source_params: the source parameter sequence.
     :param rate: the EMA rate (closer to 1 means slower).
@@ -114,27 +91,15 @@ def mean_flat(tensor):
 def normalization(channels):
     """
     Make a standard normalization layer.
-
     :param channels: number of input channels.
     :return: an nn.Module for normalization.
     """
     return GroupNorm32(32, channels)
 
 
-def re_normalization(channels):
-    """
-    Make a standard normalization layer.
-
-    :param channels: number of input channels.
-    :return: an nn.Module for normalization.
-    """
-    return ReGroupNorm(num_channels=channels, group_size=channels, r=1.1) #reLN
-
-
 def timestep_embedding(timesteps, dim, max_period=10000):
     """
     Create sinusoidal timestep embeddings.
-
     :param timesteps: a 1-D Tensor of N indices, one per batch element.
                       These may be fractional.
     :param dim: the dimension of the output.
@@ -156,7 +121,6 @@ def checkpoint(func, inputs, params, flag):
     """
     Evaluate a function without caching intermediate activations, allowing for
     reduced memory at the expense of extra compute in the backward pass.
-
     :param func: the function to evaluate.
     :param inputs: the argument sequence to pass to `func`.
     :param params: a sequence of parameters `func` depends on but does not
@@ -199,66 +163,3 @@ class CheckpointFunction(th.autograd.Function):
         del ctx.input_params
         del output_tensors
         return (None, None) + input_grads
-
-def l2normalize(v, eps=1e-12):
-    return v / (v.norm() + eps)
-
-class SpectralNorm(nn.Module):
-    def __init__(self, module, name='weight', power_iterations=1, scale=1.):
-        super(SpectralNorm, self).__init__()
-        self.module = module
-        self.name = name
-        self.power_iterations = power_iterations
-        self.scale = scale
-        if not self._made_params():
-            self._make_params()
-
-    def _update_u_v(self):
-        u = getattr(self.module, self.name + "_u")
-        v = getattr(self.module, self.name + "_v")
-        w = getattr(self.module, self.name + "_bar")
-
-        height = w.data.shape[0]
-        for _ in range(self.power_iterations):
-            v.data = l2normalize(th.mv(th.t(w.view(height,-1).data), u.data))
-            u.data = l2normalize(th.mv(w.view(height,-1).data, v.data))
-
-        # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
-        sigma = u.dot(w.view(height, -1).mv(v))
-        if sigma > 1:
-            setattr(self.module, self.name, self.scale * w / sigma.expand_as(w))
-        else:
-            setattr(self.module, self.name, self.scale * w)
-
-    def _made_params(self):
-        try:
-            u = getattr(self.module, self.name + "_u")
-            v = getattr(self.module, self.name + "_v")
-            w = getattr(self.module, self.name + "_bar")
-            return True
-        except AttributeError:
-            return False
-
-
-    def _make_params(self):
-        w = getattr(self.module, self.name)
-
-        height = w.data.shape[0]
-        width = w.view(height, -1).data.shape[1]
-
-        u = Parameter(w.data.new(height).normal_(0, 1), requires_grad=False)
-        v = Parameter(w.data.new(width).normal_(0, 1), requires_grad=False)
-        u.data = l2normalize(u.data)
-        v.data = l2normalize(v.data)
-        w_bar = Parameter(w.data)
-
-        del self.module._parameters[self.name]
-
-        self.module.register_parameter(self.name + "_u", u)
-        self.module.register_parameter(self.name + "_v", v)
-        self.module.register_parameter(self.name + "_bar", w_bar)
-
-
-    def forward(self, *args):
-        self._update_u_v()
-        return self.module.forward(*args)

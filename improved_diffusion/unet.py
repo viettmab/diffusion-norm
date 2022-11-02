@@ -15,10 +15,11 @@ from .nn import (
     avg_pool_nd,
     zero_module,
     normalization,
-    re_normalization,
     timestep_embedding,
-    checkpoint
+    checkpoint,
 )
+
+from .norm_layer import ReGroupNorm
 
 
 class TimestepBlock(nn.Module):
@@ -154,7 +155,7 @@ class ResBlock(TimestepBlock):
             SiLU(),
             nn.Dropout(p=dropout),
             zero_module(
-                (conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1))
+                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
             ),
         )
 
@@ -191,7 +192,6 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        # return self.skip_connection(x*0.5) + h * 0.5
         return self.skip_connection(x) + h
 
 
@@ -211,7 +211,7 @@ class AttentionBlock(nn.Module):
         self.norm = normalization(channels)
         self.qkv = conv_nd(1, channels, channels * 3, 1)
         self.attention = QKVAttention()
-        self.proj_out = zero_module((conv_nd(1, channels, channels, 1)))
+        self.proj_out = zero_module(conv_nd(1, channels, channels, 1))
 
     def forward(self, x):
         return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
@@ -224,8 +224,6 @@ class AttentionBlock(nn.Module):
         h = self.attention(qkv)
         h = h.reshape(b, -1, h.shape[-1])
         h = self.proj_out(h)
-        # x = x*0.5
-        # h = h*0.5
         return (x + h).reshape(b, c, *spatial)
 
 
@@ -308,6 +306,7 @@ class UNetModel(nn.Module):
             num_heads=1,
             num_heads_upsample=-1,
             use_scale_shift_norm=False,
+            rectifier=1.1,
     ):
         super().__init__()
 
@@ -326,7 +325,6 @@ class UNetModel(nn.Module):
         self.use_checkpoint = use_checkpoint
         self.num_heads = num_heads
         self.num_heads_upsample = num_heads_upsample
-
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
             linear(model_channels, time_embed_dim),
@@ -336,8 +334,8 @@ class UNetModel(nn.Module):
 
         if self.num_classes is not None:
             self.label_emb = nn.Embedding(num_classes, time_embed_dim)
-
-        # self.re_norm = re_normalization(in_channels)
+        self.rectifier = rectifier
+        self.norm = ReGroupNorm(num_channels=self.in_channels, group_size=self.in_channels, r=self.rectifier)
 
         self.input_blocks = nn.ModuleList(
             [
@@ -432,8 +430,6 @@ class UNetModel(nn.Module):
             zero_module(conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
 
-        self.re_norm = re_normalization(out_channels)
-
     def convert_to_fp16(self):
         """
         Convert the torso of the model to float16.
@@ -477,7 +473,9 @@ class UNetModel(nn.Module):
             emb = emb + self.label_emb(y)
 
         h = x.type(self.inner_dtype)
-        h = self.re_norm(h)
+
+        h = self.norm(h)
+
         for module in self.input_blocks:
             h = module(h, emb)
             hs.append(h)
