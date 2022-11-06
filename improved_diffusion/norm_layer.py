@@ -148,16 +148,17 @@ class ReGroupNorm(nn.Module):
         self.group_size = group_size
 
     def forward(self, input):
-        b = input.size(0)
-        init_size = input.size()
-        input = input.reshape(b, self.num_groups, -1)
-        s = input.size(2)
-        mean = input.mean(2)
-        var = input.var(2, unbiased=False)
+        x = torch.clone(input)
+        b = x.size(0)
+        init_size = x.size()
+        x = x.reshape(b, self.num_groups, -1)
+        s = x.size(2)
+        mean = x.mean(2)
+        var = x.var(2, unbiased=False)
 
-        input = (input - mean[:, :, None]) / (self.r*(torch.sqrt(var[:, :, None]).clamp(min=1)))
+        x = (x - mean[:, :, None]) / (self.r*(torch.sqrt(var[:, :, None]).clamp(min=1)))
 
-        input = input.reshape(init_size)
+        x = x.reshape(init_size)
         # if self.affine:
         #     if len(init_size) == 2:
         #         input = input * self.weight[None, :] + self.bias[None, :]
@@ -166,8 +167,8 @@ class ReGroupNorm(nn.Module):
         #     else:
         #         raise NotImplementedError("Only 1D and 2D groupnorm with affine")
 
-        input = input * s / (s - 1)
-        return input
+        x = x * s / (s - 1)
+        return x
 
     def __repr__(self):
         return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \
