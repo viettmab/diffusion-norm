@@ -55,7 +55,8 @@ def main():
                 (args.batch_size, 3, args.image_size, args.image_size),
                 clip_denoised=args.clip_denoised,
                 model_kwargs=model_kwargs,
-                end_step=args.early_stop
+                end_step=args.early_stop,
+                start=args.start
                 )
             sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
             sample = sample.permute(0, 1, 3, 4, 2)
@@ -70,6 +71,7 @@ def main():
                 (args.batch_size, 3, args.image_size, args.image_size),
                 clip_denoised=args.clip_denoised,
                 model_kwargs=model_kwargs,
+                start=args.start
             )
 
             sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
@@ -117,7 +119,8 @@ def create_argparser():
         batch_size=16,
         use_ddim=False,
         model_path="",
-        early_stop=0
+        early_stop=0,
+        start=50
     )
     defaults.update(model_and_diffusion_defaults())
     parser = argparse.ArgumentParser()

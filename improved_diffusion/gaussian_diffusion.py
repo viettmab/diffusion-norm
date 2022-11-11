@@ -391,6 +391,7 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
+        start=50
     ):
         """
         Generate samples from the model.
@@ -406,6 +407,7 @@ class GaussianDiffusion:
         :param device: if specified, the device to create the samples on.
                        If not specified, use a model parameter's device.
         :param progress: if True, show a tqdm progress bar.
+        :param start: which timestep the sample process starts
         :return: a non-differentiable batch of samples.
         """
         final = None
@@ -418,6 +420,7 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
+            start=start
         ):
             final = sample
         return final["sample"]
@@ -432,7 +435,8 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
-        end_step=1
+        end_step=1,
+        start=50
     ):
         """
         Generate samples from the model in early-stop mode.
@@ -450,6 +454,7 @@ class GaussianDiffusion:
                        If not specified, use a model parameter's device.
         :param progress: if True, show a tqdm progress bar.
         :param end_step: the step where sampling process stops
+        :param start: which timestep the sample process starts
         :return: list of samples at each step, which behind `end_step`
                  (`end_step`, B, C, H, W)
         """
@@ -464,6 +469,7 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
+            start=start
         ):
             final = sample["pred_xstart"]
             samples_arr.append(final)
@@ -480,6 +486,7 @@ class GaussianDiffusion:
         model_kwargs=None,
         device=None,
         progress=False,
+        start=50
     ):
         """
         Generate samples from the model and yield intermediate samples from
@@ -495,7 +502,8 @@ class GaussianDiffusion:
             img = noise
         else:
             img = th.randn(*shape, device=device)
-        indices = list(range(self.num_timesteps))[::-1]
+        # indices = list(range(self.num_timesteps))[::-1]
+        indices = list(range(start))[::-1]
 
         if progress:
             # Lazy import so that we don't depend on tqdm.
