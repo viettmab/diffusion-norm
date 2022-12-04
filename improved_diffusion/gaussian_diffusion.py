@@ -12,7 +12,7 @@ import torch as th
 
 from .nn import mean_flat
 from .losses import normal_kl, discretized_gaussian_log_likelihood
-# from .norm_layer import ReGroupNorm
+from .norm_layer import ReGroupNorm
 
 def sigmoid(x):
   return 1 / (1 + np.exp(-x))
@@ -75,6 +75,7 @@ class ModelMeanType(enum.Enum):
     PREVIOUS_X = enum.auto()  # the model predicts x_{t-1}
     START_X = enum.auto()  # the model predicts x_0
     EPSILON = enum.auto()  # the model predicts epsilon
+    EPSILON_VER2 = enum.auto()  # the model predicts epsilon but we use loss of mean
 
 
 class ModelVarType(enum.Enum):
@@ -125,12 +126,16 @@ class GaussianDiffusion:
         model_var_type,
         loss_type,
         rescale_timesteps=False,
+        rectifier=1.1
     ):
         self.model_mean_type = model_mean_type
         self.model_var_type = model_var_type
         self.loss_type = loss_type
         self.rescale_timesteps = rescale_timesteps
 
+        #Init ReLayerNorm
+        self.rectifier = rectifier
+        self.re_norm = ReGroupNorm(num_channels=3, group_size=3, r=self.rectifier)
         # Use float64 for accuracy.
         betas = np.array(betas, dtype=np.float64)
         self.betas = betas
@@ -298,7 +303,7 @@ class GaussianDiffusion:
                 self._predict_xstart_from_xprev(x_t=x, t=t, xprev=model_output)
             )
             model_mean = model_output
-        elif self.model_mean_type in [ModelMeanType.START_X, ModelMeanType.EPSILON]:
+        elif self.model_mean_type in [ModelMeanType.START_X, ModelMeanType.EPSILON, ModelMeanType.EPSILON_VER2]:
             if self.model_mean_type == ModelMeanType.START_X:
                 pred_xstart = process_xstart(model_output)
             else:
@@ -751,7 +756,15 @@ class GaussianDiffusion:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
             model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
-
+            # Use for EPSILON_VER2: mean_variance, mean_prediction, log_variance_prediction
+            mean_variance = self.p_mean_variance(
+                model, x=x_t, t=t, clip_denoised=False, **model_kwargs
+            )
+            mean_prediction, log_variance_prediction = (
+                mean_variance["mean"],
+                mean_variance["log_variance"],
+            )
+            mean_prediction = self.re_norm(mean_prediction, self._scale_timesteps(t))
             if self.model_var_type in [
                 ModelVarType.LEARNED,
                 ModelVarType.LEARNED_RANGE,
@@ -780,9 +793,14 @@ class GaussianDiffusion:
                 )[0],
                 ModelMeanType.START_X: x_start,
                 ModelMeanType.EPSILON: noise,
+                ModelMeanType.EPSILON_VER2: self.q_posterior_mean_variance(
+                    x_start=x_start, x_t=x_t, t=t
+                )[0],
             }[self.model_mean_type]
             assert model_output.shape == target.shape == x_start.shape
             terms["mse"] = mean_flat((target - model_output) ** 2)
+            if self.model_mean_type == ModelMeanType.EPSILON_VER2:
+                terms["mse"] = mean_flat((target - mean_prediction) ** 2)
             if "vb" in terms:
                 terms["loss"] = terms["mse"] + terms["vb"]
             else:

@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 
+NON_NORM_FROM_STEP=10000
+
 class BatchNorm(nn.BatchNorm2d):
     def __init__(self, num_features, eps=1e-5, momentum=0.1,
                  affine=True, track_running_stats=True):
@@ -147,28 +149,27 @@ class ReGroupNorm(nn.Module):
         self.r = r
         self.group_size = group_size
 
-    def forward(self, input):
-        x = torch.clone(input)
-        b = x.size(0)
-        init_size = x.size()
-        x = x.reshape(b, self.num_groups, -1)
-        s = x.size(2)
-        mean = x.mean(2)
-        var = x.var(2, unbiased=False)
+    def forward(self, x, t):
+        norm_mask = t < NON_NORM_FROM_STEP
+        if not any(norm_mask):
+            return x
+        x_clone = torch.clone(x)
+        input1 = x_clone[norm_mask]
 
-        x = (x - mean[:, :, None]) / (self.r*(torch.sqrt(var[:, :, None]).clamp(min=1)))
+        b = input1.size(0)
+        init_size = input1.size()
+        input1 = input1.reshape(b, self.num_groups, -1)
+        s = input1.size(2)
+        mean = input1.mean(2)
+        var = input1.var(2, unbiased=False)
 
-        x = x.reshape(init_size)
-        # if self.affine:
-        #     if len(init_size) == 2:
-        #         input = input * self.weight[None, :] + self.bias[None, :]
-        #     elif len(init_size) == 4:
-        #         input = input * self.weight[None, :, None, None] + self.bias[None, :, None, None]
-        #     else:
-        #         raise NotImplementedError("Only 1D and 2D groupnorm with affine")
+        input1 = (input1 - mean[:, :, None]) / (self.r*(torch.sqrt(var[:, :, None]).clamp(min=1)))
 
-        x = x * s / (s - 1)
-        return x
+        input1 = input1.reshape(init_size)
+        input1 = input1 * s / (s - 1)
+
+        x_clone[norm_mask] = input1
+        return x_clone
 
     def __repr__(self):
         return f"ReGroupNorm({self.num_channels}, group_size={self.group_size}, " \

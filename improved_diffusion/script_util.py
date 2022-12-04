@@ -33,6 +33,7 @@ def model_and_diffusion_defaults():
         use_checkpoint=False,
         use_scale_shift_norm=True,
         rectifier=1.1,
+        epsilon_ver2=False,
     )
 
 
@@ -57,6 +58,7 @@ def create_model_and_diffusion(
     use_checkpoint,
     use_scale_shift_norm,
     rectifier,
+    epsilon_ver2,
 ):
     model = create_model(
         image_size,
@@ -82,6 +84,8 @@ def create_model_and_diffusion(
         rescale_timesteps=rescale_timesteps,
         rescale_learned_sigmas=rescale_learned_sigmas,
         timestep_respacing=timestep_respacing,
+        epsilon_ver2=epsilon_ver2,
+        rectifier=rectifier
     )
     return model, diffusion
 
@@ -243,6 +247,8 @@ def create_gaussian_diffusion(
     rescale_timesteps=False,
     rescale_learned_sigmas=False,
     timestep_respacing="",
+    epsilon_ver2=False,
+    rectifier=1.1,
 ):
     betas = gd.get_named_beta_schedule(noise_schedule, steps)
     if use_kl:
@@ -258,7 +264,9 @@ def create_gaussian_diffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),
         betas=betas,
         model_mean_type=(
-            gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
+            (gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X)
+            if not epsilon_ver2
+            else gd.ModelMeanType.EPSILON_VER2
         ),
         model_var_type=(
             (
@@ -271,6 +279,7 @@ def create_gaussian_diffusion(
         ),
         loss_type=loss_type,
         rescale_timesteps=rescale_timesteps,
+        rectifier=rectifier
     )
 
 

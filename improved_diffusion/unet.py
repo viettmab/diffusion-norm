@@ -474,7 +474,7 @@ class UNetModel(nn.Module):
 
         h = x.type(self.inner_dtype)
 
-        h = self.norm(h)
+        # h = self.norm(h, timesteps)
 
         for module in self.input_blocks:
             h = module(h, emb)
