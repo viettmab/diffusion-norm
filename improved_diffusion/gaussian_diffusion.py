@@ -383,6 +383,8 @@ class GaussianDiffusion:
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
+        if self.model_mean_type == ModelMeanType.EPSILON_VER2:
+            out["mean"] = self.re_norm(out["mean"], self._scale_timesteps(t))
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
