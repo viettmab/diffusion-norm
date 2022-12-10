@@ -371,6 +371,7 @@ class GaussianDiffusion:
                  - 'sample': a random sample from the model.
                  - 'pred_xstart': a prediction of x_0.
         """
+        x = self.re_norm(x, self._scale_timesteps(t))
         out = self.p_mean_variance(
             model,
             x,
@@ -383,8 +384,6 @@ class GaussianDiffusion:
         nonzero_mask = (
             (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
         )  # no noise when t == 0
-        if self.model_mean_type == ModelMeanType.EPSILON_VER2:
-            out["mean"] = self.re_norm(out["mean"], self._scale_timesteps(t))
         sample = out["mean"] + nonzero_mask * th.exp(0.5 * out["log_variance"]) * noise
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
@@ -742,6 +741,7 @@ class GaussianDiffusion:
         if noise is None:
             noise = th.randn_like(x_start)
         x_t = self.q_sample(x_start, t, noise=noise)
+        x_t = self.re_norm(x_t, self._scale_timesteps(t))
 
         terms = {}
 
@@ -757,16 +757,16 @@ class GaussianDiffusion:
             if self.loss_type == LossType.RESCALED_KL:
                 terms["loss"] *= self.num_timesteps
         elif self.loss_type == LossType.MSE or self.loss_type == LossType.RESCALED_MSE:
-            model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
+            # Comment line 762 to save memory when training
+            # model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
             # Use for EPSILON_VER2: mean_variance, mean_prediction, log_variance_prediction
             mean_variance = self.p_mean_variance(
-                model, x=x_t, t=t, clip_denoised=False, **model_kwargs
+                model, x=x_t, t=t, clip_denoised=True, **model_kwargs
             )
             mean_prediction, log_variance_prediction = (
                 mean_variance["mean"],
                 mean_variance["log_variance"],
             )
-            mean_prediction = self.re_norm(mean_prediction, self._scale_timesteps(t))
             if self.model_var_type in [
                 ModelVarType.LEARNED,
                 ModelVarType.LEARNED_RANGE,
@@ -799,8 +799,10 @@ class GaussianDiffusion:
                     x_start=x_start, x_t=x_t, t=t
                 )[0],
             }[self.model_mean_type]
-            assert model_output.shape == target.shape == x_start.shape
-            terms["mse"] = mean_flat((target - model_output) ** 2)
+            assert mean_prediction.shape == target.shape == x_start.shape
+            # Comment line 806,807 to save memory when training
+            # assert model_output.shape == target.shape == x_start.shape
+            # terms["mse"] = mean_flat((target - model_output) ** 2)
             if self.model_mean_type == ModelMeanType.EPSILON_VER2:
                 terms["mse"] = mean_flat((target - mean_prediction) ** 2)
             if "vb" in terms:
