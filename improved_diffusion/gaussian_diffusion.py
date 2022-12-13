@@ -741,7 +741,7 @@ class GaussianDiffusion:
         if noise is None:
             noise = th.randn_like(x_start)
         x_t = self.q_sample(x_start, t, noise=noise)
-        x_t = self.re_norm(x_t, self._scale_timesteps(t))
+        x_t_norm = self.re_norm(x_t, self._scale_timesteps(t))
 
         terms = {}
 
@@ -761,7 +761,7 @@ class GaussianDiffusion:
             # model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
             # Use for EPSILON_VER2: mean_variance, mean_prediction, log_variance_prediction
             mean_variance = self.p_mean_variance(
-                model, x=x_t, t=t, clip_denoised=True, **model_kwargs
+                model, x=x_t_norm, t=t, clip_denoised=True, **model_kwargs
             )
             mean_prediction, log_variance_prediction = (
                 mean_variance["mean"],
